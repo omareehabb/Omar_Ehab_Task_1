@@ -70,6 +70,43 @@ export async function createPerk(req, res, next) {
 // TODO
 // Update an existing perk by ID and validate only the fields that are being updated 
 export async function updatePerk(req, res, next) {
+  try {
+    const id = req.params.id;
+
+    // Create a relaxed Joi schema where all fields are optional
+    const perkUpdateSchema = perkSchema.fork(
+      Object.keys(perkSchema.describe().keys),
+      (schema) => schema.optional()
+    );
+
+    // Validate only provided fields
+    const { value, error } = perkUpdateSchema.validate(req.body, { stripUnknown: true });
+    if (error) return res.status(400).json({ message: error.message });
+
+    // If no valid fields are provided
+    if (Object.keys(value).length === 0) {
+      return res.status(400).json({ message: 'No valid fields provided to update' });
+    }
+
+    // Update or create if not found (upsert)
+    const doc = await Perk.findOneAndUpdate(
+      { _id: id },
+      { $set: value },
+      {
+        new: true,
+        upsert: true,
+        runValidators: true,
+        setDefaultsOnInsert: true
+      }
+    );
+
+    res.status(200).json({ perk: doc });
+  } catch (err) {
+    if (err.code === 11000) {
+      return res.status(409).json({ message: 'Duplicate perk for this merchant' });
+    }
+    next(err);
+  }
   
 }
 
